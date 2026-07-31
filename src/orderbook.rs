@@ -217,6 +217,34 @@ impl OrderBook {
         fills
     }
 
+    pub fn mid_price(&self) -> Option<u64> {
+        Some((self.best_bid()? + self.best_ask()?) / 2)
+    }
+
+    pub fn depth(&self, n: usize) -> (Vec<(Price, Quantity)>, Vec<(Price, Quantity)>) {
+        let bids = self
+            .bids
+            .iter()
+            .rev()
+            .take(n)
+            .map(|(&price, orders)| {
+                let qty: Quantity = orders.iter().map(|o| o.quantity).sum();
+                (price, qty)
+            })
+            .collect();
+
+        let asks = self
+            .asks
+            .iter()
+            .take(n)
+            .map(|(&price, orders)| {
+                let qty: Quantity = orders.iter().map(|o| o.quantity).sum();
+                (price, qty)
+            })
+            .collect();
+        (bids, asks)
+    }
+
     // Print the order book — useful for debugging and demos.
     // Shows asks top-down (highest first), then bids top-down (highest first).
     pub fn display(&self) {
@@ -345,5 +373,32 @@ mod tests {
 
         assert_eq!(fills.len(), 1);
         assert_eq!(fills[0].execution_price, 69_500); // not 70_000
+    }
+
+    #[test]
+    fn mid_price_is_average_of_best_bid_and_ask() {
+        let mut book = OrderBook::new();
+        book.add_order(limit(1, Side::Bid, 100, 1));
+        book.add_order(limit(2, Side::Ask, 110, 1));
+
+        assert_eq!(book.mid_price(), Some(105));
+    }
+
+    #[test]
+    fn depth_returns_top_n_levels_sorted() {
+        let mut book = OrderBook::new();
+        book.add_order(limit(1, Side::Bid, 100, 5));
+        book.add_order(limit(2, Side::Bid, 90, 3));
+        book.add_order(limit(3, Side::Bid, 80, 2));
+        book.add_order(limit(4, Side::Ask, 110, 4));
+        book.add_order(limit(5, Side::Ask, 120, 6));
+        book.add_order(limit(6, Side::Ask, 130, 1));
+
+        let (bids, asks) = book.depth(2);
+
+        assert_eq!(bids.len(), 2);
+        assert_eq!(asks.len(), 2);
+        assert_eq!(bids, vec![(100, 5), (90, 3)]);
+        assert_eq!(asks, vec![(110, 4), (120, 6)]);
     }
 }
